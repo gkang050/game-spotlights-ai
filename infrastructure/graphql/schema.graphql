@@ -1,0 +1,220 @@
+type User {
+  id: ID!
+  username: String!
+  email: String!
+  preferences: [Preference]
+  highlights: [Highlight]
+}
+
+type Preference {
+  id: ID!
+  userId: ID!
+  type: PreferenceType!
+  value: String!
+  weight: Int
+}
+
+enum PreferenceType {
+  TEAM
+  PLAYER
+  PLAY_TYPE
+  SPORT
+}
+
+type Game {
+  id: ID!
+  title: String!
+  description: String
+  sport: String!
+  teams: [String!]!
+  startTime: AWSDateTime!
+  endTime: AWSDateTime
+  status: GameStatus!
+  videoUrl: String
+}
+
+enum GameStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+type Highlight {
+  id: ID!
+  gameId: ID!
+  title: String!
+  description: String
+  startTime: AWSDateTime!
+  duration: Int!
+  videoUrl: String!
+  thumbnailUrl: String
+  tags: [String]
+  players: [String]
+  teams: [String]
+  playType: String
+  importance: Int
+  views: Int
+  likes: Int
+}
+
+type UserHighlight {
+  id: ID!
+  userId: ID!
+  highlightId: ID!
+  watched: Boolean
+  liked: Boolean
+  sharedAt: AWSDateTime
+}
+
+type Query {
+  getUser(id: ID!): User
+  getGame(id: ID!): Game
+  getHighlight(id: ID!): Highlight
+  listGames(filter: GameFilterInput, limit: Int, nextToken: String): GameConnection!
+  listHighlights(filter: HighlightFilterInput, limit: Int, nextToken: String): HighlightConnection!
+  getUserHighlights(userId: ID!, filter: UserHighlightFilterInput, limit: Int, nextToken: String): UserHighlightConnection!
+  getPersonalizedHighlights(userId: ID!, limit: Int): [Highlight]!
+}
+
+type Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(input: UpdateUserInput!): User!
+  deleteUser(id: ID!): Boolean
+  
+  createPreference(input: CreatePreferenceInput!): Preference!
+  updatePreference(input: UpdatePreferenceInput!): Preference!
+  deletePreference(id: ID!): Boolean
+  
+  createGame(input: CreateGameInput!): Game!
+  updateGame(input: UpdateGameInput!): Game!
+  deleteGame(id: ID!): Boolean
+  
+  createHighlight(input: CreateHighlightInput!): Highlight!
+  updateHighlight(input: UpdateHighlightInput!): Highlight!
+  deleteHighlight(id: ID!): Boolean
+  
+  watchHighlight(userId: ID!, highlightId: ID!): UserHighlight!
+  likeHighlight(userId: ID!, highlightId: ID!, liked: Boolean!): UserHighlight!
+  shareHighlight(userId: ID!, highlightId: ID!): UserHighlight!
+}
+
+type Subscription {
+  onHighlightCreated(gameId: ID): Highlight
+  onGameStatusChanged(gameId: ID): Game
+  onUserHighlightInteraction(userId: ID!): UserHighlight
+}
+
+input GameFilterInput {
+  sport: String
+  status: GameStatus
+  teams: [String]
+  startTimeFrom: AWSDateTime
+  startTimeTo: AWSDateTime
+}
+
+input HighlightFilterInput {
+  gameId: ID
+  teams: [String]
+  players: [String]
+  playType: String
+  importanceMin: Int
+  tags: [String]
+}
+
+input UserHighlightFilterInput {
+  watched: Boolean
+  liked: Boolean
+  shared: Boolean
+}
+
+input CreateUserInput {
+  username: String!
+  email: String!
+}
+
+input UpdateUserInput {
+  id: ID!
+  username: String
+  email: String
+}
+
+input CreatePreferenceInput {
+  userId: ID!
+  type: PreferenceType!
+  value: String!
+  weight: Int
+}
+
+input UpdatePreferenceInput {
+  id: ID!
+  weight: Int
+}
+
+input CreateGameInput {
+  title: String!
+  description: String
+  sport: String!
+  teams: [String!]!
+  startTime: AWSDateTime!
+  endTime: AWSDateTime
+  status: GameStatus!
+  videoUrl: String
+}
+
+input UpdateGameInput {
+  id: ID!
+  title: String
+  description: String
+  status: GameStatus
+  endTime: AWSDateTime
+  videoUrl: String
+}
+
+input CreateHighlightInput {
+  gameId: ID!
+  title: String!
+  description: String
+  startTime: AWSDateTime!
+  duration: Int!
+  videoUrl: String!
+  thumbnailUrl: String
+  tags: [String]
+  players: [String]
+  teams: [String]
+  playType: String
+  importance: Int
+}
+
+input UpdateHighlightInput {
+  id: ID!
+  title: String
+  description: String
+  thumbnailUrl: String
+  tags: [String]
+  players: [String]
+  teams: [String]
+  playType: String
+  importance: Int
+}
+
+type GameConnection {
+  items: [Game]!
+  nextToken: String
+}
+
+type HighlightConnection {
+  items: [Highlight]!
+  nextToken: String
+}
+
+type UserHighlightConnection {
+  items: [UserHighlight]!
+  nextToken: String
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

@@ -1,0 +1,61 @@
+{
+  "info": {
+    "name": "Game Highlights AI API",
+    "description": "Test collection for Game Highlights AI PoC",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get All Highlights",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://frmy6y6wl5.execute-api.us-east-1.amazonaws.com/prod/highlights",
+          "protocol": "https",
+          "host": ["frmy6y6wl5", "execute-api", "us-east-1", "amazonaws", "com"],
+          "path": ["prod", "highlights"]
+        }
+      }
+    },
+    {
+      "name": "Soccer Fan Personalization",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://frmy6y6wl5.execute-api.us-east-1.amazonaws.com/prod/users/soccer-fan/preferences",
+          "protocol": "https",
+          "host": ["frmy6y6wl5", "execute-api", "us-east-1", "amazonaws", "com"],
+          "path": ["prod", "users", "soccer-fan", "preferences"]
+        }
+      }
+    },
+    {
+      "name": "Basketball Fan Personalization",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://frmy6y6wl5.execute-api.us-east-1.amazonaws.com/prod/users/basketball-fan/preferences",
+          "protocol": "https",
+          "host": ["frmy6y6wl5", "execute-api", "us-east-1", "amazonaws", "com"],
+          "path": ["prod", "users", "basketball-fan", "preferences"]
+        }
+      }
+    },
+    {
+      "name": "Tennis Fan Personalization",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://frmy6y6wl5.execute-api.us-east-1.amazonaws.com/prod/users/tennis-fan/preferences",
+          "protocol": "https",
+          "host": ["frmy6y6wl5", "execute-api", "us-east-1", "amazonaws", "com"],
+          "path": ["prod", "users", "tennis-fan", "preferences"]
+        }
+      }
+    }
+  ]
+}

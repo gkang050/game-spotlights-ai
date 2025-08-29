@@ -1,0 +1,34 @@
+{
+  "name": "game-spotlights-ai",
+  "version": "1.0.0",
+  "description": "Real-time personalized game highlights using AWS AI/ML services",
+  "main": "index.js",
+  "scripts": {
+    "build": "cd infrastructure && npm run build",
+    "deploy": "./scripts/deploy.sh",
+    "synth": "cd infrastructure && npm run synth",
+    "test": "./scripts/test-system.sh",
+    "install-deps": "cd infrastructure && npm install",
+    "bootstrap": "cd infrastructure && cdk bootstrap",
+    "diff": "cd infrastructure && cdk diff",
+    "destroy": "cd infrastructure && cdk destroy",
+    "demo-data": "./scripts/create-demo-data.sh",
+    "quick-start": "./scripts/deploy.sh && ./scripts/create-demo-data.sh && ./scripts/test-system.sh"
+  },
+  "keywords": [
+    "aws",
+    "ai",
+    "ml",
+    "video",
+    "highlights",
+    "personalization",
+    "rekognition",
+    "bedrock"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/game-spotlights-ai.git"
+  }
+}

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Highlights AI - Demo Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .container { margin: 20px 0; }
+        .highlight { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px; }
+        .highlight h3 { margin: 0 0 10px 0; color: #333; }
+        .metadata { font-size: 0.9em; color: #666; }
+        .excitement { font-weight: bold; }
+        .excitement.high { color: #e74c3c; }
+        .excitement.medium { color: #f39c12; }
+        .excitement.low { color: #27ae60; }
+        button { padding: 10px 20px; margin: 5px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #2980b9; }
+        .loading { color: #666; font-style: italic; }
+        .error { color: #e74c3c; background: #fdf2f2; padding: 10px; border-radius: 5px; }
+        .success { color: #27ae60; background: #f2fdf2; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🎮 Game Highlights AI - Live Demo</h1>
+    <p>Test your deployed Game Highlights AI system with real API calls.</p>
+    
+    <div class="container">
+        <h2>📊 API Tests</h2>
+        <button onclick="testAllHighlights()">Get All Highlights</button>
+        <button onclick="testPersonalization('soccer-fan')">Soccer Fan Highlights</button>
+        <button onclick="testPersonalization('basketball-fan')">Basketball Fan Highlights</button>
+        <button onclick="testPersonalization('tennis-fan')">Tennis Fan Highlights</button>
+        <button onclick="testPersonalization('casual-viewer')">Casual Viewer Highlights</button>
+    </div>
+
+    <div id="results" class="container">
+        <h2>📋 Results</h2>
+        <div id="output">Click a button above to test the API</div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://frmy6y6wl5.execute-api.us-east-1.amazonaws.com/prod';
+        
+        function showLoading() {
+            document.getElementById('output').innerHTML = '<div class="loading">🔄 Loading...</div>';
+        }
+        
+        function showError(error) {
+            document.getElementById('output').innerHTML = `<div class="error">❌ Error: ${error}</div>`;
+        }
+        
+        function showSuccess(message) {
+            document.getElementById('output').innerHTML = `<div class="success">✅ ${message}</div>`;
+        }
+        
+        function renderHighlights(data, title) {
+            let html = `<h3>${title}</h3>`;
+            html += `<p><strong>Total Highlights:</strong> ${data.highlightsCount}</p>`;
+            
+            if (data.highlights && data.highlights.length > 0) {
+                data.highlights.forEach(highlight => {
+                    const excitementClass = highlight.excitementLevel >= 8 ? 'high' : 
+                                          highlight.excitementLevel >= 6 ? 'medium' : 'low';
+                    
+                    html += `
+                        <div class="highlight">
+                            <h3>${highlight.title}</h3>
+                            <p>${highlight.description}</p>
+                            <div class="metadata">
+                                <span><strong>Sport:</strong> ${highlight.sport}</span> | 
+                                <span><strong>Duration:</strong> ${highlight.duration}s</span> | 
+                                <span><strong>Play Type:</strong> ${highlight.playType}</span> | 
+                                <span class="excitement ${excitementClass}"><strong>Excitement:</strong> ${highlight.excitementLevel}/10</span>
+                                ${highlight.personalizedScore ? ` | <span><strong>Personal Score:</strong> ${highlight.personalizedScore}</span>` : ''}
+                                ${highlight.aiEnhanced ? ' | <span style="color: #9b59b6;"><strong>🤖 AI Enhanced</strong></span>' : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<p>No highlights found.</p>';
+            }
+            
+            document.getElementById('output').innerHTML = html;
+        }
+        
+        async function testAllHighlights() {
+            showLoading();
+            try {
+                const response = await fetch(`${API_BASE}/highlights`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    renderHighlights(data, '🎯 All Available Highlights');
+                } else {
+                    showError(data.message || 'Failed to fetch highlights');
+                }
+            } catch (error) {
+                showError(`Network error: ${error.message}`);
+            }
+        }
+        
+        async function testPersonalization(userId) {
+            showLoading();
+            try {
+                const response = await fetch(`${API_BASE}/users/${userId}/preferences`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    renderHighlights(data, `🎯 Personalized Highlights for ${userId}`);
+                } else {
+                    showError(data.message || 'Failed to fetch personalized highlights');
+                }
+            } catch (error) {
+                showError(`Network error: ${error.message}`);
+            }
+        }
+        
+        // Auto-test on page load
+        window.onload = function() {
+            testAllHighlights();
+        };
+    </script>
+</body>
+</html>

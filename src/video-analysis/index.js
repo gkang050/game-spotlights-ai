@@ -1,10 +1,16 @@
-const AWS = require('aws-sdk');
-const rekognition = new AWS.Rekognition();
-const dynamoDB = new AWS.DynamoDB.DocumentClient();
-const s3 = new AWS.S3();
+const { RekognitionClient, StartLabelDetectionCommand, StartPersonTrackingCommand, GetLabelDetectionCommand, GetPersonTrackingCommand } = require('@aws-sdk/client-rekognition');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, BatchWriteCommand } = require('@aws-sdk/lib-dynamodb');
+const { S3Client } = require('@aws-sdk/client-s3');
+const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
-// Configure AWS Bedrock client when available in your region
-// const bedrockRuntime = new AWS.BedrockRuntime();
+const rekognition = new RekognitionClient({});
+const dynamoClient = new DynamoDBClient({});
+const dynamoDB = DynamoDBDocumentClient.from(dynamoClient);
+const s3 = new S3Client({});
+const bedrockRuntime = new BedrockRuntimeClient({
+  region: process.env.AWS_REGION || 'us-east-1'
+});
 
 const HIGHLIGHTS_TABLE = process.env.HIGHLIGHTS_TABLE;
 
@@ -43,8 +49,11 @@ exports.handler = async (event) => {
     // Analyze results to find potential highlights
     const potentialHighlights = analyzeResults(labelResults, personResults);
     
+    // Enhance highlights with Bedrock AI analysis
+    const enhancedHighlights = await enhanceWithBedrock(potentialHighlights, bucket, key);
+    
     // Store highlight metadata
-    await storeHighlightMetadata(bucket, key, potentialHighlights);
+    await storeHighlightMetadata(bucket, key, enhancedHighlights);
     
     return {
       statusCode: 200,
@@ -82,7 +91,7 @@ async function startLabelDetection(bucket, key) {
     MinConfidence: 70
   };
   
-  return await rekognition.startLabelDetection(params).promise();
+  return await rekognition.send(new StartLabelDetectionCommand(params));
 }
 
 /**
@@ -98,7 +107,7 @@ async function startPersonTracking(bucket, key) {
     }
   };
   
-  return await rekognition.startPersonTracking(params).promise();
+  return await rekognition.send(new StartPersonTrackingCommand(params));
 }
 
 /**
@@ -112,9 +121,9 @@ async function waitForJobCompletion(jobType, jobId) {
     let response;
     
     if (jobType === 'label') {
-      response = await rekognition.getLabelDetection({ JobId: jobId }).promise();
+      response = await rekognition.send(new GetLabelDetectionCommand({ JobId: jobId }));
     } else if (jobType === 'person') {
-      response = await rekognition.getPersonTracking({ JobId: jobId }).promise();
+      response = await rekognition.send(new GetPersonTrackingCommand({ JobId: jobId }));
     }
     
     jobCompleted = response.JobStatus === 'SUCCEEDED';
@@ -307,12 +316,106 @@ async function storeHighlightMetadata(bucket, key, highlights) {
   for (let i = 0; i < putRequests.length; i += 25) {
     const batch = putRequests.slice(i, i + 25);
     
-    await dynamoDB.batchWrite({
+    await dynamoDB.send(new BatchWriteCommand({
       RequestItems: {
         [HIGHLIGHTS_TABLE]: batch
       }
-    }).promise();
+    }));
   }
+}
+
+/**
+ * Enhance highlights using Amazon Bedrock for contextual understanding
+ */
+async function enhanceWithBedrock(highlights, bucket, key) {
+  try {
+    // Prepare context for Bedrock analysis
+    const gameContext = {
+      videoSource: `s3://${bucket}/${key}`,
+      gameType: extractGameTypeFromKey(key),
+      highlights: highlights.map(h => ({
+        startTime: h.startTime,
+        duration: h.duration,
+        labels: h.labels,
+        confidence: h.confidence
+      }))
+    };
+
+    // Use Claude 3 Haiku for fast, cost-effective analysis
+    const prompt = `Analyze these gaming video highlights and provide enhanced context:
+
+Game Context: ${JSON.stringify(gameContext, null, 2)}
+
+For each highlight, provide:
+1. Excitement level (1-10)
+2. Play type classification (goal, save, skill move, celebration, etc.)
+3. Recommended title
+4. Target audience appeal
+
+Respond in JSON format with enhanced metadata for each highlight.`;
+
+    const params = {
+      modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+      contentType: 'application/json',
+      accept: 'application/json',
+      body: JSON.stringify({
+        anthropic_version: 'bedrock-2023-05-31',
+        max_tokens: 2000,
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      })
+    };
+
+    console.log('Calling Bedrock for highlight enhancement...');
+    const response = await bedrockRuntime.send(new InvokeModelCommand(params));
+    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    
+    if (responseBody.content && responseBody.content[0] && responseBody.content[0].text) {
+      const aiAnalysis = JSON.parse(responseBody.content[0].text);
+      
+      // Merge AI insights with existing highlights
+      return highlights.map((highlight, index) => {
+        const aiInsight = aiAnalysis.highlights?.[index] || {};
+        return {
+          ...highlight,
+          excitementLevel: aiInsight.excitementLevel || highlight.confidence / 10,
+          playType: aiInsight.playType || 'general',
+          aiTitle: aiInsight.title || `Highlight ${index + 1}`,
+          targetAudience: aiInsight.targetAudience || 'general',
+          aiEnhanced: true
+        };
+      });
+    }
+  } catch (error) {
+    console.warn('Bedrock enhancement failed, using original highlights:', error.message);
+    // Return original highlights with basic AI enhancement flag
+    return highlights.map(highlight => ({
+      ...highlight,
+      aiEnhanced: false,
+      excitementLevel: highlight.confidence / 10,
+      playType: 'detected',
+      aiTitle: `Auto-detected Highlight`
+    }));
+  }
+  
+  return highlights;
+}
+
+/**
+ * Extract game type from S3 key for better context
+ */
+function extractGameTypeFromKey(key) {
+  const keyLower = key.toLowerCase();
+  if (keyLower.includes('soccer') || keyLower.includes('football')) return 'soccer';
+  if (keyLower.includes('basketball')) return 'basketball';
+  if (keyLower.includes('tennis')) return 'tennis';
+  if (keyLower.includes('hockey')) return 'hockey';
+  if (keyLower.includes('baseball')) return 'baseball';
+  return 'general_sports';
 }
 
 /**

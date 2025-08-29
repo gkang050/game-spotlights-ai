@@ -74,7 +74,7 @@ See [architecture.md](architecture.md) for detailed architecture diagrams and in
 ```
 game-spotlights-ai/
 ├── infrastructure/       # AWS CDK code for infrastructure
-├── backend/             # Lambda functions and backend services
+├── src/             # Lambda functions and backend services
 ├── frontend/            # Web application
 ├── ml/                  # Machine learning models and training
 ├── docs/                # Documentation

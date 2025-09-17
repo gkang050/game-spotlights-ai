@@ -1,0 +1,14 @@
+{
+  "name": "health-check",
+  "version": "1.0.0",
+  "description": "Health check endpoint for system monitoring",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "private": true,
+  "dependencies": {},
+  "peerDependencies": {
+    "aws-lambda": "^1.0.0"
+  }
+}

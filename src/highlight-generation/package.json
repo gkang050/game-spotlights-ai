@@ -1,12 +1,19 @@
 {
   "name": "highlight-generation",
   "version": "1.0.0",
-  "description": "Lambda function for generating video highlights",
+  "description": "Lambda function for generating and serving highlights",
   "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "private": true,
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.0.0",
-    "@aws-sdk/lib-dynamodb": "^3.0.0",
-    "@aws-sdk/client-s3": "^3.0.0",
-    "@aws-sdk/client-mediaconvert": "^3.0.0"
+    "@aws-sdk/client-dynamodb": "^3.450.0",
+    "@aws-sdk/lib-dynamodb": "^3.450.0",
+    "@aws-sdk/client-s3": "^3.450.0",
+    "@aws-sdk/s3-request-presigner": "^3.450.0"
+  },
+  "peerDependencies": {
+    "aws-lambda": "^1.0.0"
   }
 }

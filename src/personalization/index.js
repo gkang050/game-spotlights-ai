@@ -5,13 +5,26 @@ exports.handler = async (event) => {
   console.log('Event:', JSON.stringify(event, null, 2));
   
   try {
+    // Input validation
     const userId = event.pathParameters?.userId || 'demo-user';
+    
+    // Validate userId format
+    if (typeof userId !== 'string' || userId.trim() === '') {
+      throw new Error('Invalid user ID provided');
+    }
+    
+    // Sanitize userId to prevent injection attacks
+    const sanitizedUserId = userId.trim().replace(/[^a-zA-Z0-9-_]/g, '');
+    
+    if (sanitizedUserId !== userId.trim()) {
+      console.warn(`User ID sanitized from '${userId}' to '${sanitizedUserId}'`);
+    }
     
     // Return personalized demo highlights
     const personalizedHighlights = [
       {
         highlightId: 'personalized-1',
-        title: `Personalized for ${userId}: Epic Soccer Goal`,
+        title: `Personalized for ${sanitizedUserId}: Epic Soccer Goal`,
         description: 'AI-selected based on your soccer preferences',
         duration: 15,
         sport: 'soccer',
@@ -43,7 +56,7 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         message: 'Personalized highlights retrieved successfully',
-        userId,
+        userId: sanitizedUserId,
         highlightsCount: personalizedHighlights.length,
         highlights: personalizedHighlights,
         demo: true

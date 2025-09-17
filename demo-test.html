@@ -74,6 +74,9 @@
                                 <span class="excitement ${excitementClass}"><strong>Excitement:</strong> ${highlight.excitementLevel}/10</span>
                                 ${highlight.personalizedScore ? ` | <span><strong>Personal Score:</strong> ${highlight.personalizedScore}</span>` : ''}
                                 ${highlight.aiEnhanced ? ' | <span style="color: #9b59b6;"><strong>🤖 AI Enhanced</strong></span>' : ''}
+                                ${highlight.comprehendEnhanced ? ' | <span style="color: #ff9800;"><strong>📝 Text Analyzed</strong></span>' : ''}
+                                ${highlight.titleSentiment ? ` | <span style="color: #4caf50;"><strong>Sentiment:</strong> ${highlight.titleSentiment.sentiment}</span>` : ''}
+                                ${highlight.gamingContext ? ` | <span style="color: #2196f3;"><strong>Tone:</strong> ${highlight.gamingContext.emotionalTone}</span>` : ''}
                             </div>
                         </div>
                     `;

@@ -3,6 +3,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, BatchWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client } = require('@aws-sdk/client-s3');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { ComprehendClient, DetectSentimentCommand, DetectEntitiesCommand, DetectKeyPhrasesCommand } = require('@aws-sdk/client-comprehend');
 
 const rekognition = new RekognitionClient({});
 const dynamoClient = new DynamoDBClient({});
@@ -11,8 +12,19 @@ const s3 = new S3Client({});
 const bedrockRuntime = new BedrockRuntimeClient({
   region: process.env.AWS_REGION || 'us-east-1'
 });
+const comprehend = new ComprehendClient({
+  region: process.env.AWS_REGION || 'us-east-1'
+});
 
+// Environment variable validation
 const HIGHLIGHTS_TABLE = process.env.HIGHLIGHTS_TABLE;
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-haiku-20240307-v1:0';
+
+// Validate required environment variables
+if (!HIGHLIGHTS_TABLE) {
+  throw new Error('HIGHLIGHTS_TABLE environment variable is required');
+}
 
 /**
  * Analyzes video content using AWS Rekognition and Bedrock
@@ -22,25 +34,59 @@ exports.handler = async (event) => {
   console.log('Event:', JSON.stringify(event, null, 2));
   
   try {
-    // Extract video information from the event
+    // Input validation and sanitization
     const bucket = event.bucket || event.detail?.bucket?.name;
     const key = event.key || event.detail?.object?.key;
+    const source = event.source || 'direct-upload';
+    const isKinesisSegment = source === 'kinesis-video-streams';
     
-    if (!bucket || !key) {
-      throw new Error('Missing bucket or key information');
+    // Validate required parameters
+    if (!bucket || typeof bucket !== 'string' || bucket.trim() === '') {
+      throw new Error('Invalid or missing bucket name');
     }
     
-    console.log(`Processing video from ${bucket}/${key}`);
+    if (!key || typeof key !== 'string' || key.trim() === '') {
+      throw new Error('Invalid or missing object key');
+    }
+    
+    // Sanitize inputs
+    const sanitizedBucket = bucket.trim();
+    const sanitizedKey = key.trim();
+    
+    // Validate file extension for security
+    if (!isKinesisSegment && !sanitizedKey.toLowerCase().endsWith('.mp4')) {
+      throw new Error('Only MP4 files are supported for direct uploads');
+    }
+    
+    // Validate S3 key format to prevent path traversal
+    if (sanitizedKey.includes('..') || sanitizedKey.startsWith('/')) {
+      throw new Error('Invalid file path detected');
+    }
+    
+    console.log(`Processing video from ${sanitizedBucket}/${sanitizedKey} (source: ${source})`);
+    
+    // Handle Kinesis segments differently
+    if (isKinesisSegment) {
+      console.log('Processing Kinesis Video Stream segment');
+      console.log('Kinesis metadata:', event.kinesisMetadata);
+      
+      // For demo: Kinesis segments are JSON files, not actual video
+      // In production, these would be real video segments
+      if (key.includes('live-streams/')) {
+        console.log('Note: Processing mock Kinesis segment for demo purposes');
+        return await processMockKinesisSegment(sanitizedBucket, sanitizedKey, event);
+      }
+    }
     
     // Start label detection job
-    const labelDetectionResponse = await startLabelDetection(bucket, key);
+    const labelDetectionResponse = await startLabelDetection(sanitizedBucket, sanitizedKey);
     const labelJobId = labelDetectionResponse.JobId;
     
     // Wait for label detection to complete
     const labelResults = await waitForJobCompletion('label', labelJobId);
     
     // Start person tracking job
-    const personTrackingResponse = await startPersonTracking(bucket, key);
+    const personTrackingResponse = await startPersonTracking(sanitizedBucket, sanitizedKey);
     const personJobId = personTrackingResponse.JobId;
     
     // Wait for person tracking to complete
@@ -50,10 +96,16 @@ exports.handler = async (event) => {
     const potentialHighlights = analyzeResults(labelResults, personResults);
     
     // Enhance highlights with Bedrock AI analysis
-    const enhancedHighlights = await enhanceWithBedrock(potentialHighlights, bucket, key);
+    const enhancedHighlights = await enhanceWithBedrock(potentialHighlights, sanitizedBucket, sanitizedKey);
+    
+    // Further enhance with Comprehend text analysis
+    const comprehendEnhancedHighlights = await enhanceWithComprehend(enhancedHighlights);
     
     // Store highlight metadata
-    await storeHighlightMetadata(bucket, key, enhancedHighlights);
+    await storeHighlightMetadata(sanitizedBucket, sanitizedKey, comprehendEnhancedHighlights);
+    
+    // Note: Clip generation will be triggered automatically by DynamoDB stream
+    console.log(`Stored ${comprehendEnhancedHighlights.length} highlights. Clip generation will be triggered by DynamoDB stream.`);
     
     return {
       statusCode: 200,
@@ -61,19 +113,38 @@ exports.handler = async (event) => {
         message: 'Video analysis completed successfully',
         videoKey: key,
         highlightsCount: potentialHighlights.length,
-        highlights: potentialHighlights
+        highlights: comprehendEnhancedHighlights,
+        clipGenerationNote: 'Clip generation triggered via DynamoDB stream'
       }
     };
   } catch (error) {
-    console.error('Error processing video:', error);
+    console.error('Error processing video:', {
+      error: error.message,
+      stack: error.stack,
+      bucket: event.bucket,
+      key: event.key,
+      source: event.source,
+      timestamp: new Date().toISOString()
+    });
     
-    return {
-      statusCode: 500,
-      body: {
-        message: 'Error processing video',
-        error: error.message
-      }
+    // Return structured error response
+    const errorResponse = {
+      statusCode: error.name === 'ValidationError' ? 400 : 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: JSON.stringify({
+        error: true,
+        message: 'Video processing failed',
+        details: error.message,
+        timestamp: new Date().toISOString(),
+        requestId: event.requestContext?.requestId || 'unknown',
+        service: 'video-analysis'
+      })
     };
+    
+    return errorResponse;
   }
 };
 
@@ -306,7 +377,18 @@ async function storeHighlightMetadata(bucket, key, highlights) {
           confidence: highlight.confidence,
           labels: highlight.labels,
           personCount: highlight.personCount || 0,
-          processed: false
+          excitementLevel: highlight.excitementLevel || 5,
+          playType: highlight.playType || 'general',
+          aiTitle: highlight.aiTitle || `Highlight ${index + 1}`,
+          aiEnhanced: highlight.aiEnhanced || false,
+          comprehendEnhanced: highlight.comprehendEnhanced || false,
+          titleSentiment: highlight.titleSentiment,
+          titleEntities: highlight.titleEntities,
+          titleKeyPhrases: highlight.titleKeyPhrases,
+          gamingContext: highlight.gamingContext,
+          processed: true,
+          clipGenerated: false,
+          clipStatus: 'pending'
         }
       }
     };
@@ -355,7 +437,7 @@ For each highlight, provide:
 Respond in JSON format with enhanced metadata for each highlight.`;
 
     const params = {
-      modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+      modelId: BEDROCK_MODEL_ID,
       contentType: 'application/json',
       accept: 'application/json',
       body: JSON.stringify({
@@ -425,4 +507,297 @@ function extractGameIdFromKey(key) {
   // Assuming key format: games/GAME_ID/video.mp4
   const parts = key.split('/');
   return parts.length >= 2 ? parts[1] : 'unknown-game';
+}
+
+/**
+ * Enhance highlights with Amazon Comprehend text analysis
+ */
+async function enhanceWithComprehend(highlights) {
+  console.log('Enhancing highlights with Comprehend text analysis...');
+  
+  try {
+    const enhancedHighlights = [];
+    
+    for (const highlight of highlights) {
+      const enhanced = { ...highlight };
+      
+      // Analyze the AI-generated title with Comprehend
+      if (highlight.aiTitle) {
+        const titleAnalysis = await analyzeTextWithComprehend(highlight.aiTitle);
+        enhanced.titleSentiment = titleAnalysis.sentiment;
+        enhanced.titleEntities = titleAnalysis.entities;
+        enhanced.titleKeyPhrases = titleAnalysis.keyPhrases;
+      }
+      
+      // Analyze the description if available
+      if (highlight.description) {
+        const descriptionAnalysis = await analyzeTextWithComprehend(highlight.description);
+        enhanced.descriptionSentiment = descriptionAnalysis.sentiment;
+        enhanced.descriptionEntities = descriptionAnalysis.entities;
+      }
+      
+      // Generate gaming-specific sentiment context
+      enhanced.gamingContext = generateGamingContext(enhanced);
+      enhanced.comprehendEnhanced = true;
+      
+      enhancedHighlights.push(enhanced);
+    }
+    
+    console.log(`Enhanced ${enhancedHighlights.length} highlights with Comprehend analysis`);
+    return enhancedHighlights;
+    
+  } catch (error) {
+    console.warn('Comprehend enhancement failed, using original highlights:', error.message);
+    return highlights.map(highlight => ({
+      ...highlight,
+      comprehendEnhanced: false
+    }));
+  }
+}
+
+/**
+ * Analyze text with Amazon Comprehend
+ */
+async function analyzeTextWithComprehend(text) {
+  try {
+    const analysis = {
+      sentiment: null,
+      entities: [],
+      keyPhrases: []
+    };
+    
+    // Detect sentiment
+    const sentimentCommand = new DetectSentimentCommand({
+      Text: text,
+      LanguageCode: 'en'
+    });
+    const sentimentResult = await comprehend.send(sentimentCommand);
+    analysis.sentiment = {
+      sentiment: sentimentResult.Sentiment,
+      confidence: sentimentResult.SentimentScore[sentimentResult.Sentiment]
+    };
+    
+    // Detect entities
+    const entitiesCommand = new DetectEntitiesCommand({
+      Text: text,
+      LanguageCode: 'en'
+    });
+    const entitiesResult = await comprehend.send(entitiesCommand);
+    analysis.entities = entitiesResult.Entities.map(entity => ({
+      text: entity.Text,
+      type: entity.Type,
+      confidence: entity.Score
+    }));
+    
+    // Detect key phrases
+    const keyPhrasesCommand = new DetectKeyPhrasesCommand({
+      Text: text,
+      LanguageCode: 'en'
+    });
+    const keyPhrasesResult = await comprehend.send(keyPhrasesCommand);
+    analysis.keyPhrases = keyPhrasesResult.KeyPhrases.map(phrase => ({
+      text: phrase.Text,
+      confidence: phrase.Score
+    }));
+    
+    return analysis;
+    
+  } catch (error) {
+    console.error('Error analyzing text with Comprehend:', error);
+    return {
+      sentiment: null,
+      entities: [],
+      keyPhrases: []
+    };
+  }
+}
+
+/**
+ * Generate gaming-specific context based on Comprehend analysis
+ */
+function generateGamingContext(highlight) {
+  const context = {
+    emotionalTone: 'neutral',
+    gameplayType: 'general',
+    audienceAppeal: 'broad'
+  };
+  
+  // Analyze sentiment for emotional tone
+  if (highlight.titleSentiment) {
+    const sentiment = highlight.titleSentiment.sentiment;
+    const confidence = highlight.titleSentiment.confidence;
+    
+    if (confidence > 0.7) {
+      switch (sentiment) {
+        case 'POSITIVE':
+          context.emotionalTone = 'exciting';
+          break;
+        case 'NEGATIVE':
+          context.emotionalTone = 'intense';
+          break;
+        case 'NEUTRAL':
+          context.emotionalTone = 'balanced';
+          break;
+      }
+    }
+  }
+  
+  // Analyze entities for gameplay type
+  if (highlight.titleEntities && highlight.titleEntities.length > 0) {
+    const entities = highlight.titleEntities;
+    
+    // Look for sports/gaming related entities
+    for (const entity of entities) {
+      const text = entity.text.toLowerCase();
+      if (text.includes('goal') || text.includes('score')) {
+        context.gameplayType = 'scoring';
+      } else if (text.includes('save') || text.includes('defense')) {
+        context.gameplayType = 'defensive';
+      } else if (text.includes('skill') || text.includes('move')) {
+        context.gameplayType = 'technical';
+      }
+    }
+  }
+  
+  // Determine audience appeal based on key phrases
+  if (highlight.titleKeyPhrases && highlight.titleKeyPhrases.length > 0) {
+    const phrases = highlight.titleKeyPhrases;
+    let appealScore = 0;
+    
+    for (const phrase of phrases) {
+      const text = phrase.text.toLowerCase();
+      if (text.includes('epic') || text.includes('amazing') || text.includes('incredible')) {
+        appealScore += 2;
+      } else if (text.includes('great') || text.includes('good') || text.includes('nice')) {
+        appealScore += 1;
+      }
+    }
+    
+    if (appealScore >= 3) {
+      context.audienceAppeal = 'high';
+    } else if (appealScore >= 1) {
+      context.audienceAppeal = 'medium';
+    }
+  }
+  
+  return context;
+}
+
+/**
+ * Process mock Kinesis segment for demo purposes
+ * In production, this would process real video segments from Kinesis
+ */
+async function processMockKinesisSegment(bucket, key, event) {
+  console.log('Processing mock Kinesis segment - simulating real-time analysis');
+  
+  try {
+    // Create mock highlights based on Kinesis segment metadata
+    const mockHighlights = [
+      {
+        startTime: 0,
+        endTime: event.kinesisMetadata?.segmentDuration || 30,
+        duration: event.kinesisMetadata?.segmentDuration || 30,
+        confidence: 88.5,
+        labels: ['Sports', 'Person', 'Action'],
+        personCount: 2,
+        excitementLevel: 7,
+        playType: 'live-action',
+        aiTitle: `Live Gaming Moment - ${new Date().toLocaleTimeString()}`,
+        aiEnhanced: true,
+        source: 'kinesis-video-streams',
+        isLiveSegment: true,
+        streamTimestamp: event.kinesisMetadata?.streamTimestamp
+      }
+    ];
+    
+    // Enhance with Bedrock for consistency
+    const enhancedHighlights = await enhanceWithBedrock(mockHighlights, bucket, key);
+    
+    // Add Comprehend analysis
+    const comprehendEnhancedHighlights = await enhanceWithComprehend(enhancedHighlights);
+    
+    // Store in DynamoDB with Kinesis-specific metadata
+    await storeKinesisHighlightMetadata(bucket, key, comprehendEnhancedHighlights, event);
+    
+    return {
+      statusCode: 200,
+      body: {
+        message: 'Kinesis video segment processed successfully',
+        videoKey: key,
+        source: 'kinesis-video-streams',
+        segmentId: event.segmentId,
+        streamName: event.streamName,
+        highlightsCount: mockHighlights.length,
+        highlights: comprehendEnhancedHighlights,
+        processingNote: 'Mock processing - demonstrates Kinesis integration'
+      }
+    };
+    
+  } catch (error) {
+    console.error('Error processing Kinesis segment:', error);
+    return {
+      statusCode: 500,
+      body: {
+        message: 'Error processing Kinesis segment',
+        error: error.message,
+        videoKey: key,
+        source: 'kinesis-video-streams'
+      }
+    };
+  }
+}
+
+/**
+ * Store Kinesis-sourced highlight metadata with additional context
+ */
+async function storeKinesisHighlightMetadata(bucket, key, highlights, event) {
+  const segmentId = event.segmentId || 'unknown-segment';
+  const streamName = event.streamName || 'unknown-stream';
+  const timestamp = new Date().toISOString();
+  
+  const putRequests = highlights.map((highlight, index) => {
+    const highlightId = `kinesis-${segmentId}-${timestamp}-${index}`;
+    
+    return {
+      PutRequest: {
+        Item: {
+          highlightId,
+          timestamp,
+          gameId: `live-${streamName}`,
+          sourceVideo: `s3://${bucket}/${key}`,
+          startTime: highlight.startTime,
+          endTime: highlight.endTime,
+          duration: highlight.duration,
+          confidence: highlight.confidence,
+          labels: highlight.labels,
+          personCount: highlight.personCount || 0,
+          excitementLevel: highlight.excitementLevel,
+          playType: highlight.playType,
+          aiTitle: highlight.aiTitle,
+          aiEnhanced: highlight.aiEnhanced,
+          comprehendEnhanced: highlight.comprehendEnhanced || false,
+          // Kinesis-specific fields
+          source: 'kinesis-video-streams',
+          streamName: streamName,
+          segmentId: segmentId,
+          isLiveSegment: true,
+          streamTimestamp: event.kinesisMetadata?.streamTimestamp,
+          processed: true
+        }
+      }
+    };
+  });
+  
+  // Batch write to DynamoDB
+  for (let i = 0; i < putRequests.length; i += 25) {
+    const batch = putRequests.slice(i, i + 25);
+    
+    await dynamoDB.send(new BatchWriteCommand({
+      RequestItems: {
+        [HIGHLIGHTS_TABLE]: batch
+      }
+    }));
+  }
+  
+  console.log(`Stored ${highlights.length} Kinesis highlights in DynamoDB`);
 }

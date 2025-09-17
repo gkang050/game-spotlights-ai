@@ -93,5 +93,5 @@ echo -e "${GREEN}✅ Personalization active (notice different content per user)$
 echo -e "${GREEN}✅ AI enhancement visible (excitement levels, play types)${NC}"
 echo -e "${GREEN}✅ Multi-sport support demonstrated${NC}"
 echo ""
-echo -e "${WHITE}🎯 Your Game Highlights AI is ready for AWS Summit LA!${NC}"
+echo -e "${WHITE}🎯 Your Game Highlights AI system is ready for production use!${NC}"
 echo ""

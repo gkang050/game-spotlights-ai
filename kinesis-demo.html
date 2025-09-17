@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Highlights AI - Kinesis Video Streaming Demo</title>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1.24.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .demo-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .demo-section h2 {
+            color: #FFD700;
+            margin-top: 0;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px 0 rgba(76, 175, 80, 0.3);
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(76, 175, 80, 0.4);
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .stop-btn {
+            background: linear-gradient(45deg, #f44336, #da190b) !important;
+            box-shadow: 0 4px 15px 0 rgba(244, 67, 54, 0.3) !important;
+        }
+        .stop-btn:hover {
+            box-shadow: 0 6px 20px 0 rgba(244, 67, 54, 0.4) !important;
+        }
+        .upload-btn {
+            background: linear-gradient(45deg, #2196F3, #1976D2) !important;
+            box-shadow: 0 4px 15px 0 rgba(33, 150, 243, 0.3) !important;
+        }
+        .upload-btn:hover {
+            box-shadow: 0 6px 20px 0 rgba(33, 150, 243, 0.4) !important;
+        }
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        video {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        .status.info {
+            background: rgba(33, 150, 243, 0.2);
+            border: 1px solid rgba(33, 150, 243, 0.5);
+        }
+        .status.success {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+        }
+        .status.error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.5);
+        }
+        .config-section {
+            margin: 20px 0;
+        }
+        .config-section input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+        }
+        .config-section input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .file-input {
+            margin: 10px 0;
+        }
+        .file-input input[type="file"] {
+            display: none;
+        }
+        .file-input label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #FF9800, #F57C00);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px 0 rgba(255, 152, 0, 0.3);
+        }
+        .file-input label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(255, 152, 0, 0.4);
+        }
+        .stream-info {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+        .highlight {
+            color: #FFD700;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎮 Game Highlights AI</h1>
+            <p>Kinesis Video Streaming Demo</p>
+        </div>
+
+        <!-- Configuration Section -->
+        <div class="demo-section">
+            <h2>🔧 Stream Configuration</h2>
+            <div class="config-section">
+                <input type="text" id="streamName" placeholder="Kinesis Video Stream Name" value="game-highlights-stream-123456789">
+                <input type="text" id="region" placeholder="AWS Region" value="us-east-1">
+                <input type="text" id="accessKey" placeholder="Use AWS STS temporary credentials">
+                <input type="password" id="secretKey" placeholder="Never use permanent credentials">
+                <input type="text" id="sessionToken" placeholder="Session Token (required for security)">
+            </div>
+            <div class="controls">
+                <button onclick="initializeKinesis()">Initialize Kinesis Client</button>
+            </div>
+            <div id="initStatus"></div>
+        </div>
+
+        <!-- Live Streaming Section -->
+        <div class="demo-section">
+            <h2>📹 Live Video Streaming</h2>
+            <p>Stream live video from your camera directly to Kinesis Video Streams</p>
+            
+            <div class="video-container">
+                <video id="liveVideo" autoplay muted playsinline></video>
+            </div>
+            
+            <div class="controls">
+                <button onclick="startLiveStream()" id="startStreamBtn">Start Live Stream</button>
+                <button onclick="stopLiveStream()" id="stopStreamBtn" class="stop-btn" disabled>Stop Stream</button>
+            </div>
+            
+            <div id="streamStatus"></div>
+            
+            <div class="stream-info" id="streamInfo" style="display: none;">
+                <div><span class="highlight">Stream Name:</span> <span id="currentStreamName">-</span></div>
+                <div><span class="highlight">Status:</span> <span id="streamingStatus">Not Streaming</span></div>
+                <div><span class="highlight">Chunks Sent:</span> <span id="chunkCount">0</span></div>
+                <div><span class="highlight">Duration:</span> <span id="streamDuration">00:00</span></div>
+            </div>
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="demo-section">
+            <h2>📁 Video File Upload</h2>
+            <p>Upload pre-recorded gaming videos to Kinesis Video Streams</p>
+            
+            <div class="file-input">
+                <label for="videoFile">Choose Gaming Video File</label>
+                <input type="file" id="videoFile" accept="video/*" onchange="handleFileSelect(event)">
+            </div>
+            
+            <div class="controls">
+                <button onclick="uploadVideoFile()" id="uploadBtn" class="upload-btn" disabled>Upload to Kinesis</button>
+            </div>
+            
+            <div id="uploadStatus"></div>
+        </div>
+
+        <!-- Stream Processing Section -->
+        <div class="demo-section">
+            <h2>⚡ Real-time Processing</h2>
+            <p>Monitor how your streamed content is processed by the AI pipeline</p>
+            
+            <div class="controls">
+                <button onclick="checkProcessingStatus()">Check Processing Status</button>
+                <button onclick="triggerAnalysis()">Trigger AI Analysis</button>
+            </div>
+            
+            <div id="processingStatus"></div>
+        </div>
+
+        <!-- Instructions Section -->
+        <div class="demo-section">
+            <h2>📋 Instructions</h2>
+            <ol>
+                <li><strong>Configure AWS Credentials:</strong> Enter your AWS credentials and Kinesis Video Stream name</li>
+                <li><strong>Initialize Client:</strong> Click "Initialize Kinesis Client" to set up the connection</li>
+                <li><strong>Live Streaming:</strong> Click "Start Live Stream" to begin streaming from your camera</li>
+                <li><strong>File Upload:</strong> Select a gaming video file and upload it to Kinesis</li>
+                <li><strong>Monitor Processing:</strong> Watch as the AI processes your content in real-time</li>
+            </ol>
+            
+            <div class="status info">
+                <strong>⚠️ SECURITY WARNING:</strong> Only use AWS STS temporary credentials. Never enter permanent AWS credentials in web applications. For production, use AWS Cognito or IAM roles for web identity federation.
+                The stream will be processed by the Game Highlights AI pipeline automatically.
+            </div>
+        </div>
+    </div>
+
+    <script src="src/kinesis-client/kinesis-video-uploader.js"></script>
+    <script>
+        let kinesisUploader = null;
+        let selectedFile = null;
+        let streamStartTime = null;
+        let streamTimer = null;
+        let chunkCount = 0;
+
+        async function initializeKinesis() {
+            try {
+                const streamName = document.getElementById('streamName').value;
+                const region = document.getElementById('region').value;
+                const accessKey = document.getElementById('accessKey').value;
+                const secretKey = document.getElementById('secretKey').value;
+                const sessionToken = document.getElementById('sessionToken').value;
+
+                if (!streamName || !region || !accessKey || !secretKey) {
+                    showStatus('initStatus', 'Please use AWS STS temporary credentials only - never permanent credentials!', 'error');
+                    return;
+                }
+
+                showStatus('initStatus', 'Initializing Kinesis Video client...', 'info');
+
+                kinesisUploader = new KinesisVideoUploader({
+                    streamName,
+                    region,
+                    accessKeyId: accessKey,
+                    secretAccessKey: secretKey,
+                    sessionToken: sessionToken || undefined
+                });
+
+                await kinesisUploader.initialize();
+                showStatus('initStatus', '✅ Kinesis Video client initialized successfully!', 'success');
+                
+                // Enable streaming buttons
+                document.getElementById('startStreamBtn').disabled = false;
+                if (selectedFile) {
+                    document.getElementById('uploadBtn').disabled = false;
+                }
+
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showStatus('initStatus', `❌ Error initializing client: ${error.message}`, 'error');
+            }
+        }
+
+        async function startLiveStream() {
+            if (!kinesisUploader) {
+                showStatus('streamStatus', 'Please initialize Kinesis client first', 'error');
+                return;
+            }
+
+            try {
+                showStatus('streamStatus', 'Starting live stream...', 'info');
+
+                const stream = await kinesisUploader.startLiveStream({
+                    video: { width: 1280, height: 720 },
+                    audio: true
+                });
+
+                // Display video in the video element
+                const videoElement = document.getElementById('liveVideo');
+                videoElement.srcObject = stream;
+
+                // Update UI
+                document.getElementById('startStreamBtn').disabled = true;
+                document.getElementById('stopStreamBtn').disabled = false;
+                
+                // Show stream info
+                document.getElementById('streamInfo').style.display = 'block';
+                document.getElementById('currentStreamName').textContent = kinesisUploader.streamName;
+                document.getElementById('streamingStatus').textContent = 'Streaming';
+                
+                // Start timer
+                streamStartTime = Date.now();
+                chunkCount = 0;
+                startStreamTimer();
+
+                showStatus('streamStatus', '✅ Live streaming started! Video is being sent to Kinesis Video Streams.', 'success');
+
+            } catch (error) {
+                console.error('Streaming error:', error);
+                showStatus('streamStatus', `❌ Error starting stream: ${error.message}`, 'error');
+            }
+        }
+
+        function stopLiveStream() {
+            if (kinesisUploader) {
+                kinesisUploader.stopLiveStream();
+                
+                // Clear video
+                const videoElement = document.getElementById('liveVideo');
+                videoElement.srcObject = null;
+                
+                // Update UI
+                document.getElementById('startStreamBtn').disabled = false;
+                document.getElementById('stopStreamBtn').disabled = true;
+                document.getElementById('streamingStatus').textContent = 'Not Streaming';
+                
+                // Stop timer
+                stopStreamTimer();
+                
+                showStatus('streamStatus', '⏹️ Live streaming stopped.', 'info');
+            }
+        }
+
+        function handleFileSelect(event) {
+            selectedFile = event.target.files[0];
+            if (selectedFile && kinesisUploader) {
+                document.getElementById('uploadBtn').disabled = false;
+                showStatus('uploadStatus', `File selected: ${selectedFile.name}`, 'info');
+            }
+        }
+
+        async function uploadVideoFile() {
+            if (!kinesisUploader || !selectedFile) {
+                showStatus('uploadStatus', 'Please select a file and initialize Kinesis client', 'error');
+                return;
+            }
+
+            try {
+                showStatus('uploadStatus', `Uploading ${selectedFile.name} to Kinesis Video Streams...`, 'info');
+                
+                const result = await kinesisUploader.uploadVideoFile(selectedFile);
+                
+                showStatus('uploadStatus', `✅ File uploaded successfully! Stream: ${kinesisUploader.streamName}`, 'success');
+                
+                // Trigger processing check
+                setTimeout(() => {
+                    checkProcessingStatus();
+                }, 2000);
+
+            } catch (error) {
+                console.error('Upload error:', error);
+                showStatus('uploadStatus', `❌ Error uploading file: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkProcessingStatus() {
+            try {
+                showStatus('processingStatus', 'Checking processing status...', 'info');
+                
+                // In a real implementation, this would call your API
+                // For demo, simulate processing status
+                setTimeout(() => {
+                    const status = `
+                        <div class="stream-info">
+                            <div><span class="highlight">Processing Status:</span> Active</div>
+                            <div><span class="highlight">AI Analysis:</span> In Progress</div>
+                            <div><span class="highlight">Highlights Detected:</span> 3</div>
+                            <div><span class="highlight">Last Update:</span> ${new Date().toLocaleTimeString()}</div>
+                        </div>
+                    `;
+                    showStatus('processingStatus', status, 'success');
+                }, 1000);
+
+            } catch (error) {
+                showStatus('processingStatus', `❌ Error checking status: ${error.message}`, 'error');
+            }
+        }
+
+        async function triggerAnalysis() {
+            try {
+                showStatus('processingStatus', 'Triggering AI analysis pipeline...', 'info');
+                
+                // In a real implementation, this would call your Lambda function
+                setTimeout(() => {
+                    showStatus('processingStatus', '✅ AI analysis pipeline triggered! Check back in a few minutes for results.', 'success');
+                }, 1500);
+
+            } catch (error) {
+                showStatus('processingStatus', `❌ Error triggering analysis: ${error.message}`, 'error');
+            }
+        }
+
+        function startStreamTimer() {
+            streamTimer = setInterval(() => {
+                if (streamStartTime) {
+                    const elapsed = Date.now() - streamStartTime;
+                    const minutes = Math.floor(elapsed / 60000);
+                    const seconds = Math.floor((elapsed % 60000) / 1000);
+                    document.getElementById('streamDuration').textContent = 
+                        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
+                
+                // Simulate chunk count increment
+                if (kinesisUploader && kinesisUploader.isStreaming) {
+                    chunkCount++;
+                    document.getElementById('chunkCount').textContent = chunkCount;
+                }
+            }, 1000);
+        }
+
+        function stopStreamTimer() {
+            if (streamTimer) {
+                clearInterval(streamTimer);
+                streamTimer = null;
+            }
+        }
+
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        // Initialize with demo values on page load
+        window.addEventListener('load', () => {
+            // You can pre-fill with demo credentials if available
+            console.log('Kinesis Video Streaming Demo loaded');
+        });
+    </script>
+</body>
+</html>

@@ -415,6 +415,13 @@ settings.local.json
 *.swp
 *.swo
 *~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+.atom/
+.brackets.json
 
 # AWS CLI installers
 AWSCLIV2.pkg

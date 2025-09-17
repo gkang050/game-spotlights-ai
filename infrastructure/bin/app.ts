@@ -12,7 +12,7 @@ new GameHighlightsPocStack(app, 'GameHighlightsPocStack', {
     account: process.env.CDK_DEFAULT_ACCOUNT, 
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1' 
   },
-  description: 'Game Highlights PoC - Demo for AWS Summit LA',
+  description: 'Game Highlights AI - Real-time personalized game highlights using AWS AI/ML services',
 });
 
 // Full production stack (commented out for PoC)

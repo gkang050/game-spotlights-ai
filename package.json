@@ -3,17 +3,24 @@
   "version": "1.0.0",
   "description": "Real-time personalized game highlights using AWS AI/ML services",
   "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "scripts": {
     "build": "cd infrastructure && npm run build",
     "deploy": "./scripts/deploy.sh",
     "synth": "cd infrastructure && npm run synth",
     "test": "./scripts/test-system.sh",
-    "install-deps": "cd infrastructure && npm install",
+    "install-deps": "cd infrastructure && npm install && cd ../src && find . -name package.json -execdir npm install \\;",
     "bootstrap": "cd infrastructure && cdk bootstrap",
     "diff": "cd infrastructure && cdk diff",
     "destroy": "cd infrastructure && cdk destroy",
     "demo-data": "./scripts/create-demo-data.sh",
-    "quick-start": "./scripts/deploy.sh && ./scripts/create-demo-data.sh && ./scripts/test-system.sh"
+    "quick-start": "./scripts/deploy.sh && ./scripts/create-demo-data.sh && ./scripts/test-system.sh",
+    "lint": "echo 'Linting not configured - add ESLint for production'",
+    "security-check": "echo 'Security scanning not configured - add npm audit for production'",
+    "clean": "rm -rf infrastructure/node_modules infrastructure/dist infrastructure/cdk.out && find src -name node_modules -type d -exec rm -rf {} + 2>/dev/null || true"
   },
   "keywords": [
     "aws",
@@ -25,10 +32,15 @@
     "rekognition",
     "bedrock"
   ],
-  "author": "Your Name",
+  "author": "Game Spotlights AI Team",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/yourusername/game-spotlights-ai.git"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/game-spotlights-ai/issues"
+  },
+  "homepage": "https://github.com/yourusername/game-spotlights-ai#readme",
+  "private": false
 }
